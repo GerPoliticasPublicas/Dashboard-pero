@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard v2-0 - Monitoramento PE</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1200px; margin: auto; }
+        
+        .header-dash { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .header-dash h1 { color: #003366; margin: 0; font-size: 1.8em; }
+        .badge-versao { background: #005A9C; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.5em; vertical-align: middle; margin-left: 10px; }
+        .btn { padding: 10px 20px; background: #005A9C; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; transition: background 0.3s; }
+        .btn:hover { background: #004080; }
+        
+        .filtros-box { background: #fff; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .filtro-group { display: flex; align-items: center; gap: 10px; }
+        .filtro-group label { font-weight: bold; color: #003366; }
+        .filtro-group select { padding: 8px 15px; border-radius: 5px; border: 1px solid #ccc; font-size: 1em; min-width: 180px; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; flex-wrap: wrap; }
+        .tab-btn { background: #e9ecef; border: none; padding: 10px 20px; font-size: 1em; font-weight: bold; color: #555; cursor: pointer; border-radius: 5px 5px 0 0; transition: 0.3s; }
+        .tab-btn.active { background: #005A9C; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #005A9C; }
+        .card h3 { margin: 0; font-size: 0.85em; color: #666; text-transform: uppercase; }
+        .card .numero { font-size: 2.2em; font-weight: bold; color: #003366; margin: 10px 0 0 0; }
+        
+        .grid-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .chart-box { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .chart-box h3 { margin-top: 0; color: #003366; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 10px; font-size: 1.1em; }
+        
+        .table-box { background: #fff; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 30px; overflow: hidden; }
+        .table-header { padding: 20px; border-bottom: 1px solid #eee; background: #fdfdfd; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .table-header h3 { margin: 0; color: #003366; font-size: 1.1em; }
+        .tabela-resumo { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .tabela-resumo th, .tabela-resumo td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+        .tabela-resumo th { background: #eef4fa; color: #003366; font-weight: bold; position: sticky; top: 0; }
+        .tabela-resumo tr:last-child td { border-bottom: none; }
+        .tabela-resumo tr:hover { background: #f9f9f9; }
+        
+        .loading { text-align: center; font-size: 1.2em; color: #005A9C; margin-top: 50px; }
+        .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
+        
+        @media (max-width: 768px) {
+            .grid-charts { grid-template-columns: 1fr; }
+            .tabela-resumo { display: block; overflow-x: auto; white-space: nowrap; }
+            .tabs { flex-direction: column; }
+            .tab-btn { border-radius: 5px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-dash">
+        <h1>Painel de Monitoramento <span class="badge-versao">v2-0</span></h1>
+        <a href="index.html" class="btn">← Voltar ao Formulário</a>
+    </div>
+
+    <div class="filtros-box">
+        <div class="filtro-group">
+            <label for="filtroUnidade">Unidade:</label>
+            <select id="filtroUnidade" onchange="aplicarFiltros()">
+                <option value="TODAS">Todas as Unidades</option>
+            </select>
+        </div>
+        <div class="filtro-group">
+            <label for="filtroPeriodo">Período:</label>
+            <select id="filtroPeriodo" onchange="aplicarFiltros()">
+                <option value="TODOS">Todos os Períodos</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="abrirAba('resultados')">Resultados e Indicadores</button>
+        <button class="tab-btn" onclick="abrirAba('projetos')">Projetos e Execução</button>
+    </div>
+
+    <div id="loading" class="loading">Carregando dados da base central...</div>
+
+    <div id="dashboard-content" style="display: none;">
+        
+        <!-- ABA DE RESULTADOS -->
+        <div id="aba-resultados" class="tab-content active">
+            <div class="grid-cards">
+                <div class="card">
+                    <h3>Resultados Cadastrados</h3>
+                    <div class="numero" id="totalResultados">0</div>
+                </div>
+                <div class="card">
+                    <h3>Indicadores Monitorados</h3>
+                    <div class="numero" id="totalIndicadores">0</div>
+                </div>
+                <div class="card">
+                    <h3>Indicadores com Valor</h3>
+                    <div class="numero" id="totalIndicadoresPreenchidos" style="color: #0B875B;">0</div>
+                </div>
+            </div>
+
+            <div class="table-box">
+                <div class="table-header">
+                    <h3>Detalhamento dos Resultados</h3>
+                    <div class="filtro-group">
+                        <label for="modoResultado">Visualização:</label>
+                        <select id="modoResultado" onchange="aplicarFiltros()" style="padding: 5px 10px; font-size: 0.9em;">
+                            <option value="ULTIMO">Último Quadrimestre</option>
+                            <option value="SOMA_ANO">Soma do Ano</option>
+                            <option value="ACUMULADO">Acumulado do Plano</option>
+                        </select>
+                    </div>
+                </div>
+                <table class="tabela-resumo" id="tabelaResultados">
+                    <thead>
+                        <tr>
+                            <th>Unidade</th>
+                            <th>Resultado</th>
+                            <th>Indicador</th>
+                            <th>Meta 2027</th>
+                            <th>Valor Alcançado</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ABA DE PROJETOS -->
+        <div id="aba-projetos" class="tab-content">
+            <div class="grid-cards">
+                <div class="card">
+                    <h3>Projetos Monitorados</h3>
+                    <div class="numero" id="totalProjetos">0</div>
+                </div>
+                <div class="card">
+                    <h3>MAPAs Pendentes</h3>
+                    <div class="numero" id="totalMapaPendentes" style="color: #e67e22;">0</div>
+                </div>
+                <div class="card">
+                    <h3>MAPAs Validadas</h3>
+                    <div class="numero" id="totalMapaValidadas" style="color: #0B875B;">0</div>
+                </div>
+            </div>
+
+            <div class="grid-charts">
+                <div class="chart-box">
+                    <h3>Projetos por Fase (TAP)</h3>
+                    <canvas id="chartFases"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h3>Execução Física Cumulativa (Geral)</h3>
+                    <canvas id="chartProgresso"></canvas>
+                </div>
+            </div>
+
+            <!-- NOVO GRÁFICO INDIVIDUAL -->
+            <div class="table-box" style="padding: 20px; margin-bottom: 30px;">
+                <div class="table-header" style="padding: 0 0 15px 0; border-bottom: none; background: transparent;">
+                    <h3>Evolução da Execução por Projeto (Histórico)</h3>
+                    <div class="filtro-group">
+                        <label for="projetoIndividual">Selecione o Projeto:</label>
+                        <select id="projetoIndividual" onchange="renderizarGraficoIndividual()" style="padding: 8px 15px; border-radius: 5px; border: 1px solid #ccc; font-size: 0.95em; min-width: 250px;">
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="height: 300px; position: relative;">
+                    <canvas id="chartIndividual"></canvas>
+                </div>
+            </div>
+
+            <div class="table-box">
+                <div class="table-header">
+                    <h3>Projetos em Execução (Status Mais Recente)</h3>
+                    <div class="filtro-group">
+                        <label for="modoRecurso">Recurso Executado:</label>
+                        <select id="modoRecurso" onchange="aplicarFiltros()" style="padding: 5px 10px; font-size: 0.9em;">
+                            <option value="QUADRIMESTRE">Quadrimestre</option>
+                            <option value="ANO">Soma do Ano</option>
+                            <option value="TOTAL">Acumulado Total</option>
+                        </select>
+                    </div>
+                </div>
+                <table class="tabela-resumo" id="tabelaProjetos">
+                    <thead>
+                        <tr>
+                            <th>Unidade</th>
+                            <th>Projeto</th>
+                            <th>Fase</th>
+                            <th>% Exec.</th>
+                            <th>Rec. Previsto</th>
+                            <th>Rec. Executado</th>
+                            <th>Dificuldades</th>
+                            <th>Última Atualização</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    var URL_GOOGLE = "https://script.google.com/macros/s/AKfycbw4NxHtUTQ9AyWN97RQxCHE7PK0cyBID_aS45rgwcBZRB5_DFzuUU2TwfO9UKTw3Q/exec";
+    var TOKEN_ACESSO = "PE-RO-2026-A7F3B9E2C4D8F1A5B6E7C8D9A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E6F7A8B9";
+
+    var DADOS_BRUTOS = { submissoes: [], resultados: [], projetos: [], mapa: [] };
+    var chartFasesInstance = null;
+    var chartProgressoInstance = null;
+    var chartIndividualInstance = null; // Variável para o novo gráfico
+
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch(URL_GOOGLE + "?token=" + encodeURIComponent(TOKEN_ACESSO) + "&acao=carregar_dashboard")
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.result === 'success') {
+                    DADOS_BRUTOS = data;
+                    preencherFiltros();
+                    aplicarFiltros(); 
+                    preencherSelectProjetosIndividuais();
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('dashboard-content').style.display = 'block';
+                } else {
+                    document.getElementById('loading').textContent = 'Erro: ' + data.message;
+                }
+            })
+            .catch(function(err) {
+                document.getElementById('loading').textContent = 'Erro de conexão: ' + err.message;
+            });
+    });
+
+    function abrirAba(aba) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById('aba-' + aba).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    function preencherFiltros() {
+        var selectU = document.getElementById('filtroUnidade');
+        var selectP = document.getElementById('filtroPeriodo');
+        var unidadesSet = new Set();
+        var periodosSet = new Set();
+        
+        if(DADOS_BRUTOS.submissoes) {
+            DADOS_BRUTOS.submissoes.forEach(sub => {
+                if(sub[2]) unidadesSet.add(sub[2]);
+                if(sub[5]) periodosSet.add(sub[5]);
+            });
+        }
+        
+        Array.from(unidadesSet).sort().forEach(u => {
+            var opt = document.createElement('option'); opt.value = u; opt.textContent = u; selectU.appendChild(opt);
+        });
+        Array.from(periodosSet).sort().forEach(p => {
+            var opt = document.createElement('option'); opt.value = p; opt.textContent = p; selectP.appendChild(opt);
+        });
+    }
+
+    // Preenche o Select de Projetos para o gráfico individual
+    function preencherSelectProjetosIndividuais() {
+        var selectProj = document.getElementById('projetoIndividual');
+        var projetosSet = new Set();
+        
+        if(DADOS_BRUTOS.projetos) {
+            DADOS_BRUTOS.projetos.forEach(p => {
+                if(p[1] && p[3]) projetosSet.add(p[1] + "|" + p[3]); // Unidade | Projeto
+            });
+        }
+        
+        Array.from(projetosSet).sort().forEach(item => {
+            var partes = item.split("|");
+            var opt = document.createElement('option');
+            opt.value = item;
+            opt.textContent = partes[0] + " - " + partes[1].substring(0, 40) + (partes[1].length > 40 ? '...' : '');
+            selectProj.appendChild(opt);
+        });
+    }
+
+    function aplicarFiltros() {
+        var unidade = document.getElementById('filtroUnidade').value;
+        var periodo = document.getElementById('filtroPeriodo').value;
+        processarDados(unidade, periodo);
+    }
+
+    function parseProgresso(pctStr) {
+        if (pctStr === null || pctStr === undefined || pctStr === '') return 0;
+        var limpo = String(pctStr).replace("'", "").replace("%", "").replace(",", ".").trim();
+        var num = parseFloat(limpo);
+        if (isNaN(num)) return 0;
+        if (num > 0 && num <= 1) return Math.round(num * 100);
+        return Math.round(num);
+    }
+
+    function parseCurrency(valStr) {
+        if (valStr === null || valStr === undefined || valStr === '') return 0;
+        var limpo = String(valStr)
+            .replace(/R\$/gi, "").replace(/\s/g, "").replace(/\./g, "").replace(/,/g, ".")
+            .replace(/[^0-9.]/g, "").trim();
+        var num = parseFloat(limpo);
+        return isNaN(num) ? 0 : num;
+    }
+
+    function formatCurrency(val) {
+        return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function formatDate(isoStr) {
+        if (!isoStr) return '-';
+        try {
+            var d = new Date(isoStr);
+            if (isNaN(d.getTime())) return String(isoStr).substring(0, 10);
+            return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+        } catch(e) { return String(isoStr).substring(0, 10); }
+    }
+
+    function processarDados(unidadeFiltro, periodoFiltro) {
+        var projetos = DADOS_BRUTOS.projetos || [];
+        var resultados = DADOS_BRUTOS.resultados || [];
+        var mapas = DADOS_BRUTOS.mapa_respostas || [];
+        
+        var modoResultado = document.getElementById('modoResultado').value;
+        var modoRecurso = document.getElementById('modoRecurso').value;
+
+        // Filtrar Base
+        var projetosFiltrados = projetos;
+        var resultadosFiltrados = resultados;
+        var mapasFiltrados = mapas;
+
+        if (unidadeFiltro !== 'TODAS') {
+            projetosFiltrados = projetosFiltrados.filter(p => p[1] === unidadeFiltro);
+            resultadosFiltrados = resultadosFiltrados.filter(r => r[1] === unidadeFiltro);
+            mapasFiltrados = mapasFiltrados.filter(m => m.unidade === unidadeFiltro);
+        }
+        if (periodoFiltro !== 'TODOS') {
+            projetosFiltrados = projetosFiltrados.filter(p => p[2] === periodoFiltro);
+            resultadosFiltrados = resultadosFiltrados.filter(r => r[2] === periodoFiltro);
+        }
+
+        // --- RESULTADOS ---
+        var agrupadoResultados = {};
+        resultadosFiltrados.forEach(r => {
+            var chave = r[1] + "|" + r[4];
+            if (!agrupadoResultados[chave]) {
+                agrupadoResultados[chave] = { unidade: r[1], resultado: r[3], indicador: r[4], meta2027: r[5], valores: [] };
+            }
+            var numVal = parseCurrency(r[7]);
+            if (numVal > 0) agrupadoResultados[chave].valores.push(numVal);
+        });
+
+        var listaResultados = [];
+        for (var key in agrupadoResultados) {
+            var item = agrupadoResultados[key];
+            var valorFinal = 0;
+            if (item.valores.length === 0) valorFinal = 0;
+            else if (modoResultado === 'ULTIMO') valorFinal = item.valores[item.valores.length - 1];
+            else valorFinal = item.valores.reduce((a, b) => a + b, 0);
+            
+            listaResultados.push({ unidade: item.unidade, resultado: item.resultado, indicador: item.indicador, meta2027: item.meta2027, valorFinal: valorFinal });
+        }
+
+        document.getElementById('totalResultados').textContent = new Set(listaResultados.map(r => r.resultado)).size;
+        document.getElementById('totalIndicadores').textContent = listaResultados.length;
+        document.getElementById('totalIndicadoresPreenchidos').textContent = listaResultados.filter(r => r.valorFinal > 0).length;
+
+        var tbodyRes = document.querySelector('#tabelaResultados tbody');
+        tbodyRes.innerHTML = '';
+        if (listaResultados.length === 0) {
+            tbodyRes.innerHTML = '<tr><td colspan="5" class="empty-state">Nenhum resultado encontrado.</td></tr>';
+        } else {
+            listaResultados.forEach(res => {
+                var tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${res.unidade}</strong></td>
+                    <td>${res.resultado || '-'}</td>
+                    <td>${res.indicador || '-'}</td>
+                    <td>${res.meta2027 || '-'}</td>
+                    <td><strong style="color:#005A9C">${res.valorFinal.toLocaleString('pt-BR')}</strong></td>
+                `;
+                tbodyRes.appendChild(tr);
+            });
+        }
+
+        // --- PROJETOS ---
+        var agrupadoProjetos = {};
+        projetosFiltrados.forEach(p => {
+            var chave = p[1] + "|" + p[3];
+            if (!agrupadoProjetos[chave]) agrupadoProjetos[chave] = [];
+            agrupadoProjetos[chave].push(p);
+        });
+
+        var listaProjetos = [];
+        for (var key in agrupadoProjetos) {
+            var historico = agrupadoProjetos[key];
+            historico.sort((a, b) => String(a[0]).localeCompare(String(b[0]))); 
+            
+            var ultimoProjeto = historico[historico.length - 1];
+            
+            var somaExec = 0;
+            if (modoRecurso === 'QUADRIMESTRE') {
+                var ultimoId = ultimoProjeto[0];
+                historico.forEach(h => { if (h[0] === ultimoId) somaExec += parseCurrency(h[12]); });
+            } else {
+                historico.forEach(h => { somaExec += parseCurrency(h[12]); });
+            }
+
+            listaProjetos.push({
+                unidade: ultimoProjeto[1],
+                projeto: ultimoProjeto[3],
+                fase: ultimoProjeto[4] || 'inicial',
+                progresso: parseProgresso(ultimoProjeto[7]),
+                recPrev: ultimoProjeto[11],
+                recExec: somaExec,
+                dificuldade: ultimoProjeto[13],
+                ultimaAtt: ultimoProjeto[0].split('_')[1] ? new Date(parseInt(ultimoProjeto[0].split('_')[1])).toISOString() : new Date().toISOString()
+            });
+        }
+
+        document.getElementById('totalProjetos').textContent = listaProjetos.length;
+        var mapasValidadas = mapasFiltrados.filter(m => m.status_unidade === 'Arquivado/Validado').length;
+        var mapasPendentes = mapasFiltrados.filter(m => m.status_unidade !== 'Arquivado/Validado').length;
+        document.getElementById('totalMapaPendentes').textContent = mapasPendentes;
+        document.getElementById('totalMapaValidadas').textContent = mapasValidadas;
+
+        var fasesCount = { inicial: 0, intermediaria: 0, final: 0, concluido: 0 };
+        var tbodyProj = document.querySelector('#tabelaProjetos tbody');
+        tbodyProj.innerHTML = '';
+
+        if (listaProjetos.length === 0) {
+            tbodyProj.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhum projeto encontrado.</td></tr>';
+        } else {
+            listaProjetos.forEach(proj => {
+                if (fasesCount[proj.fase] !== undefined) fasesCount[proj.fase]++;
+                var tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${proj.unidade}</strong></td>
+                    <td>${proj.projeto}</td>
+                    <td style="text-transform: capitalize;">${proj.fase}</td>
+                    <td><strong>${proj.progresso}%</strong></td>
+                    <td>${proj.recPrev || '-'}</td>
+                    <td><strong style="color:#0B875B">${formatCurrency(proj.recExec)}</strong></td>
+                    <td>${proj.dificuldade || '-'}</td>
+                    <td style="font-size:0.85em; color:#666;">${formatDate(proj.ultimaAtt)}</td>
+                `;
+                tbodyProj.appendChild(tr);
+            });
+        }
+
+        renderizarGraficos(fasesCount, listaProjetos);
+    }
+
+    function renderizarGraficos(fasesCount, listaProjetos) {
+        if (chartFasesInstance) chartFasesInstance.destroy();
+        if (chartProgressoInstance) chartProgressoInstance.destroy();
+
+        var ctxFases = document.getElementById('chartFases').getContext('2d');
+        chartFasesInstance = new Chart(ctxFases, {
+            type: 'doughnut',
+            data: {
+                labels: ['Inicial', 'Intermediária', 'Final', 'Concluído'],
+                datasets: [{
+                    data: [fasesCount.inicial, fasesCount.intermediaria, fasesCount.final, fasesCount.concluido],
+                    backgroundColor: ['#f39c12', '#e67e22', '#0B875B', '#005A9C'],
+                    borderWidth: 1
+                }]
+            },
+            options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        var labels = [];
+        var dataPct = [];
+        var cores = [];
+
+        listaProjetos.forEach(p => {
+            labels.push(p.projeto.substring(0, 25) + '...');
+            dataPct.push(p.progresso);
+            cores.push(p.progresso > 75 ? '#0B875B' : (p.progresso > 25 ? '#e67e22' : '#dc3545'));
+        });
+
+        var ctxProgresso = document.getElementById('chartProgresso').getContext('2d');
+        chartProgressoInstance = new Chart(ctxProgresso, {
+            type: 'bar',
+            data: {
+                labels: labels.length > 0 ? labels : ['Nenhum projeto'],
+                datasets: [{
+                    label: '% Execução Física',
+                    data: dataPct.length > 0 ? dataPct : [0],
+                    backgroundColor: cores.length > 0 ? cores : ['#ddd'],
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                scales: { x: { beginAtZero: true, max: 100 } },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    // NOVA FUNÇÃO: Gráfico Individual de Evolução
+    function renderizarGraficoIndividual() {
+        var chaveProjeto = document.getElementById('projetoIndividual').value;
+        if (!chaveProjeto) {
+            if (chartIndividualInstance) chartIndividualInstance.destroy();
+            return;
+        }
+
+        // Filtra todos os registros daquele projeto
+        var historico = DADOS_BRUTOS.projetos.filter(p => (p[1] + "|" + p[3]) === chaveProjeto);
+        // Ordena por data/submissão
+        historico.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+
+        var labels = [];
+        var dataPct = [];
+        
+        historico.forEach(h => {
+            // Pega o período como label
+            labels.push(h[2] || 'Sem Período');
+            dataPct.push(parseProgresso(h[7]));
+        });
+
+        if (chartIndividualInstance) chartIndividualInstance.destroy();
+
+        var ctxIndividual = document.getElementById('chartIndividual').getContext('2d');
+        chartIndividualInstance = new Chart(ctxIndividual, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Evolução da Execução Física (%)',
+                    data: dataPct,
+                    borderColor: '#005A9C',
+                    backgroundColor: 'rgba(0, 90, 156, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.3,
+                    fill: true,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#005A9C',
+                    pointBorderWidth: 2,
+                    pointRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: '% de Execução' } }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
