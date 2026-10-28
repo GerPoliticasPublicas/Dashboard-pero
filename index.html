@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard v2-0 - Monitoramento PE</title>
+    <title>Dashboard v3-1 - Monitoramento PE</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; color: #333; }
@@ -12,6 +12,12 @@
         .header-dash { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         .header-dash h1 { color: #003366; margin: 0; font-size: 1.8em; }
         .badge-versao { background: #005A9C; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.5em; vertical-align: middle; margin-left: 10px; }
+        
+        /* BADGE DE VALIDAÇÃO */
+        .badge-validacao { display: none; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 0.9em; }
+        .badge-validado { display: inline-block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .badge-pendente { display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+
         .btn { padding: 10px 20px; background: #005A9C; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; transition: background 0.3s; }
         .btn:hover { background: #004080; }
         
@@ -59,7 +65,10 @@
 
 <div class="container">
     <div class="header-dash">
-        <h1>Painel de Monitoramento <span class="badge-versao">v2-0</span></h1>
+        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <h1>Painel de Monitoramento <span class="badge-versao">v3-1</span></h1>
+            <span id="badgeValidacao" class="badge-validacao"></span>
+        </div>
         <a href="index.html" class="btn">← Voltar ao Formulário</a>
     </div>
 
@@ -154,12 +163,11 @@
                     <canvas id="chartFases"></canvas>
                 </div>
                 <div class="chart-box">
-                    <h3>Execução Física Cumulativa (Geral)</h3>
+                    <h3>Execução Física Cumulativa</h3>
                     <canvas id="chartProgresso"></canvas>
                 </div>
             </div>
 
-            <!-- NOVO GRÁFICO INDIVIDUAL -->
             <div class="table-box" style="padding: 20px; margin-bottom: 30px;">
                 <div class="table-header" style="padding: 0 0 15px 0; border-bottom: none; background: transparent;">
                     <h3>Evolução da Execução por Projeto (Histórico)</h3>
@@ -209,13 +217,14 @@
 </div>
 
 <script>
-    var URL_GOOGLE = "https://script.google.com/macros/s/AKfycbw4NxHtUTQ9AyWN97RQxCHE7PK0cyBID_aS45rgwcBZRB5_DFzuUU2TwfO9UKTw3Q/exec";
+    // URL do seu Apps Script (v1-7)
+    var URL_GOOGLE = "https://script.google.com/macros/s/AKfycbxYEXyp-QEgzYmiwQ7FdR8M7mpVJ_2rRGUL_J1Aign-mykclYcxxuojzLi7TAIHsA/exec";
     var TOKEN_ACESSO = "PE-RO-2026-A7F3B9E2C4D8F1A5B6E7C8D9A0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E6F7A8B9";
 
-    var DADOS_BRUTOS = { submissoes: [], resultados: [], projetos: [], mapa: [] };
+    var DADOS_BRUTOS = { submissoes: [], resultados: [], projetos: [], mapa: [], validacoes: [] };
     var chartFasesInstance = null;
     var chartProgressoInstance = null;
-    var chartIndividualInstance = null; // Variável para o novo gráfico
+    var chartIndividualInstance = null;
 
     document.addEventListener('DOMContentLoaded', function() {
         fetch(URL_GOOGLE + "?token=" + encodeURIComponent(TOKEN_ACESSO) + "&acao=carregar_dashboard")
@@ -224,8 +233,8 @@
                 if (data.result === 'success') {
                     DADOS_BRUTOS = data;
                     preencherFiltros();
-                    aplicarFiltros(); 
                     preencherSelectProjetosIndividuais();
+                    aplicarFiltros(); 
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('dashboard-content').style.display = 'block';
                 } else {
@@ -265,14 +274,13 @@
         });
     }
 
-    // Preenche o Select de Projetos para o gráfico individual
     function preencherSelectProjetosIndividuais() {
         var selectProj = document.getElementById('projetoIndividual');
         var projetosSet = new Set();
         
         if(DADOS_BRUTOS.projetos) {
             DADOS_BRUTOS.projetos.forEach(p => {
-                if(p[1] && p[3]) projetosSet.add(p[1] + "|" + p[3]); // Unidade | Projeto
+                if(p[1] && p[3]) projetosSet.add(p[1] + "|" + p[3]);
             });
         }
         
@@ -302,6 +310,7 @@
 
     function parseCurrency(valStr) {
         if (valStr === null || valStr === undefined || valStr === '') return 0;
+        if (typeof valStr === 'number') return valStr;
         var limpo = String(valStr)
             .replace(/R\$/gi, "").replace(/\s/g, "").replace(/\./g, "").replace(/,/g, ".")
             .replace(/[^0-9.]/g, "").trim();
@@ -322,6 +331,39 @@
         } catch(e) { return String(isoStr).substring(0, 10); }
     }
 
+    // =================================================================
+    // VERIFICAÇÃO DE VALIDAÇÃO
+    // =================================================================
+    function verificarValidacao(unidadeFiltro, periodoFiltro) {
+        var submissoes = DADOS_BRUTOS.submissoes || [];
+        var badge = document.getElementById('badgeValidacao');
+        
+        // Filtra submissões da unidade e período selecionados
+        var filtradas = submissoes.filter(function(s) {
+            if (unidadeFiltro !== 'TODAS' && s[2] !== unidadeFiltro) return false;
+            if (periodoFiltro !== 'TODOS' && s[5] !== periodoFiltro) return false;
+            return true;
+        });
+
+        if (filtradas.length === 0) {
+            badge.className = 'badge-validacao';
+            badge.style.display = 'none';
+            return;
+        }
+
+        // Verifica se todas estão validadas (coluna 8 = validado)
+        var todasValidadas = filtradas.every(function(s) { return s[8] === 'Sim'; });
+
+        badge.style.display = 'inline-block';
+        if (todasValidadas) {
+            badge.className = 'badge-validacao badge-validado';
+            badge.innerHTML = '✅ Monitoramento Validado';
+        } else {
+            badge.className = 'badge-validacao badge-pendente';
+            badge.innerHTML = '⏳ Aguardando Validação';
+        }
+    }
+
     function processarDados(unidadeFiltro, periodoFiltro) {
         var projetos = DADOS_BRUTOS.projetos || [];
         var resultados = DADOS_BRUTOS.resultados || [];
@@ -330,7 +372,10 @@
         var modoResultado = document.getElementById('modoResultado').value;
         var modoRecurso = document.getElementById('modoRecurso').value;
 
-        // Filtrar Base
+        // 1. Atualiza o Badge de Validação
+        verificarValidacao(unidadeFiltro, periodoFiltro);
+
+        // 2. Filtrar Base
         var projetosFiltrados = projetos;
         var resultadosFiltrados = resultados;
         var mapasFiltrados = mapas;
@@ -404,6 +449,7 @@
             
             var ultimoProjeto = historico[historico.length - 1];
             
+            // Índices v1-7: 11 = recurso_previsto, 12 = recurso_executado
             var somaExec = 0;
             if (modoRecurso === 'QUADRIMESTRE') {
                 var ultimoId = ultimoProjeto[0];
@@ -419,7 +465,7 @@
                 progresso: parseProgresso(ultimoProjeto[7]),
                 recPrev: ultimoProjeto[11],
                 recExec: somaExec,
-                dificuldade: ultimoProjeto[13],
+                dificuldade: ultimoProjeto[13], // índice 13 na v1-7
                 ultimaAtt: ultimoProjeto[0].split('_')[1] ? new Date(parseInt(ultimoProjeto[0].split('_')[1])).toISOString() : new Date().toISOString()
             });
         }
@@ -506,7 +552,6 @@
         });
     }
 
-    // NOVA FUNÇÃO: Gráfico Individual de Evolução
     function renderizarGraficoIndividual() {
         var chaveProjeto = document.getElementById('projetoIndividual').value;
         if (!chaveProjeto) {
@@ -514,16 +559,13 @@
             return;
         }
 
-        // Filtra todos os registros daquele projeto
         var historico = DADOS_BRUTOS.projetos.filter(p => (p[1] + "|" + p[3]) === chaveProjeto);
-        // Ordena por data/submissão
         historico.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 
         var labels = [];
         var dataPct = [];
         
         historico.forEach(h => {
-            // Pega o período como label
             labels.push(h[2] || 'Sem Período');
             dataPct.push(parseProgresso(h[7]));
         });
